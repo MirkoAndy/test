@@ -1,0 +1,20 @@
+{
+  "name": "Ribasso — Il lavoro all'asta",
+  "short_name": "Ribasso",
+  "description": "Pubblica un lavoro, ricevi offerte al ribasso dai professionisti vicino a te. Pagamenti protetti e feedback verificati.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f5f7",
+  "theme_color": "#f5f5f7",
+  "lang": "it",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
