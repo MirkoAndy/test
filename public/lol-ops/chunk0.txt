@@ -1,0 +1,196 @@
+/* League of Leagues MVP operational layer.
+   Loaded after the approved visual preview. It preserves the approved UI and wires the real game flow. */
+(() => {
+  const opsSb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  let currentMatch = null;
+  let currentMatchState = [];
+  let currentDuels = [];
+  let currentChallenges = [];
+  let currentLeagueRole = null;
+
+  const q = s => document.querySelector(s);
+  const qa = s => [...document.querySelectorAll(s)];
+
+  function errText(error) {
+    return error?.message || error?.details || String(error || 'Unknown error');
+  }
+
+  async function getLeagueNames(ids) {
+    const clean = [...new Set((ids || []).filter(Boolean))];
+    if (!clean.length) return {};
+    const { data, error } = await opsSb.from('leagues').select('id,name,city,region').in('id', clean);
+    if (error) return {};
+    return Object.fromEntries((data || []).map(x => [x.id, x]));
+  }
+
+  async function loadCompetition() {
+    const { data } = await opsSb.from('competitions').select('id,name').eq('status','active').limit(1).maybeSingle();
+    activeCompetition = data?.id || null;
+  }
+
+  async function loadMembershipLeague() {
+    if (!currentUser) return;
+    const { data: memberships, error } = await opsSb
+      .from('league_members')
+      .select('league_id,role,team_name,joined_at')
+      .eq('user_id', currentUser.id)
+      .order('joined_at',{ascending:true})
+      .limit(10);
+    if (error || !memberships?.length) return;
+
+    let picked = memberships.find(x => ['owner','president'].includes(x.role)) || memberships[0];
+    currentLeagueRole = picked.role;
+    const { data: league } = await opsSb.from('leagues').select('*').eq('id',picked.league_id).maybeSingle();
+    if (league) currentLeague = league;
+  }
+
+  loadLeagueMembers = async function() {
+    if (!currentLeague) {
+      currentMembers = [];
+      q('#rosterPreview').innerHTML = 'No league yet. Create or join one to unlock the roster.';
+      return;
+    }
+    const { data: members, error } = await opsSb
+      .from('league_members')
+      .select('id,user_id,role,team_name,joined_at')
+      .eq('league_id', currentLeague.id)
+      .order('joined_at',{ascending:true});
+    if (error) {
+      q('#rosterPreview').innerHTML='Could not load roster right now.';
+      return;
+    }
+    const userIds = [...new Set((members || []).map(m=>m.user_id))];
+    let profileMap = {};
+    if (userIds.length) {
+      const { data: profiles } = await opsSb.from('profiles').select('id,display_name,username').in('id',userIds);
+      profileMap = Object.fromEntries((profiles || []).map(p=>[p.id,p]));
+    }
+    currentMembers = (members || []).map(row => ({
+      id: row.id,
+      user_id: row.user_id,
+      role: row.role,
+      team_name: row.team_name,
+      display_name: profileMap[row.user_id]?.display_name || profileMap[row.user_id]?.username || (row.user_id===currentUser?.id ? (currentProfile?.display_name || currentUser.email?.split('@')[0]) : 'Manager')
+    }));
+    q('#membersCount').textContent = String(currentMembers.length || currentLeague.member_target || 0);
+    q('#rosterPreview').innerHTML = currentMembers.length ? currentMembers.map(m=>`<div class="leader"><div>${['owner','president'].includes(m.role)?'♛':'•'}</div><div class="managerAvatar">${esc((m.display_name||'M').slice(0,2).toUpperCase())}</div><b>${esc(m.display_name)}</b><div style="text-align:right;font-size:11px;color:#90a0b3;text-transform:uppercase">${esc(m.team_name||m.role)}</div></div>`).join('') : 'No managers yet. Invite them to your league.';
+  };
+
+  async function loadChallenges() {
+    currentChallenges = [];
+    if (!currentLeague) return;
+    const { data, error } = await opsSb
+      .from('challenge_requests')
+      .select('id,challenger_league_id,challenged_league_id,competition_id,status,created_at,responded_at,match_id')
+      .or(`challenger_league_id.eq.${currentLeague.id},challenged_league_id.eq.${currentLeague.id}`)
+      .order('created_at',{ascending:false})
+      .limit(20);
+    if (!error) currentChallenges = data || [];
+  }
+
+  async function loadCurrentMatch() {
+    currentMatch = null; currentMatchState=[]; currentDuels=[];
+    if (!currentLeague) return;
+    const { data: match } = await opsSb
+      .from('league_matches')
+      .select('*')
+      .or(`home_league_id.eq.${currentLeague.id},away_league_id.eq.${currentLeague.id}`)
+      .neq('status','cancelled')
+      .order('created_at',{ascending:false})
+      .limit(1)
+      .maybeSingle();
+    if (!match) return;
+    currentMatch = match;
+    const [{data: states},{data: duels}] = await Promise.all([
+      opsSb.from('match_league_state').select('*').eq('match_id',match.id),
+      opsSb.from('duels').select('*').eq('match_id',match.id).order('slot')
+    ]);
+    currentMatchState = states || [];
+    currentDuels = duels || [];
+  }
+
+  function myMatchState() {
+    return currentMatchState.find(x=>x.league_id===currentLeague?.id) || null;
+  }
+
+  async function renderChallengeState() {
+    const card=q('#challengeStatus');
+    if (!card || !currentLeague) return;
+    const names = await getLeagueNames(currentChallenges.flatMap(x=>[x.challenger_league_id,x.challenged_league_id]));
+    const incoming = currentChallenges.find(x=>x.status==='pending' && x.challenged_league_id===currentLeague.id);
+    const outgoing = currentChallenges.find(x=>x.status==='pending' && x.challenger_league_id===currentLeague.id);
+
+    if (incoming) {
+      const rival=names[incoming.challenger_league_id]?.name || 'Rival league';
+      card.innerHTML=`<h4>Incoming challenge</h4><p><b>${esc(rival)}</b> has called your league out.</p><div class="split" style="margin-top:10px"><button class="secondary" id="acceptChallenge" style="margin:0">Accept</button><button class="secondary" id="declineChallenge" style="margin:0">Decline</button></div>`;
+      q('#acceptChallenge').onclick=()=>respondChallenge(incoming.id,true);
+      q('#declineChallenge').onclick=()=>respondChallenge(incoming.id,false);
+      return;
+    }
+    if (outgoing) {
+      const rival=names[outgoing.challenged_league_id]?.name || 'Rival league';
+      card.innerHTML=`<h4>Challenge pending</h4><p>Waiting for <b>${esc(rival)}</b> to respond.</p><button class="secondary" id="cancelChallenge" style="margin-top:10px">Cancel challenge</button>`;
+      q('#cancelChallenge').onclick=()=>cancelChallenge(outgoing.id);
+      return;
+    }
+    if (currentMatch) {
+      const matchNames=await getLeagueNames([currentMatch.home_league_id,currentMatch.away_league_id]);
+      const rivalId=currentMatch.home_league_id===currentLeague.id?currentMatch.away_league_id:currentMatch.home_league_id;
+      const rival=matchNames[rivalId]?.name || 'Rival league';
+      const mine=myMatchState();
+      if (currentMatch.status==='completed') {
+        const mineHome=currentMatch.home_league_id===currentLeague.id;
+        const myWins=mineHome?currentMatch.home_duel_wins:currentMatch.away_duel_wins;
+        const oppWins=mineHome?currentMatch.away_duel_wins:currentMatch.home_duel_wins;
+        card.innerHTML=`<h4>Match completed · ${myWins}–${oppWins}</h4><p>${esc(currentLeague.name)} vs ${esc(rival)}. Result and standings are now final.</p>`;
+      } else {
+        card.innerHTML=`<h4>Match vs ${esc(rival)}</h4><p>Status: <b>${esc(currentMatch.status.toUpperCase())}</b>. Your lineup: ${mine?.callup_locked_at?'LOCKED':'NOT LOCKED'}${mine?.scores_submitted_at?' · SCORES SUBMITTED':''}.</p>`;
+      }
+      return;
+    }
+    card.innerHTML='<h4>Challenge status</h4><p>No live challenge yet. Challenge another real league to start a 5 vs 5 match.</p>';
+  }
+
+  async function respondChallenge(id,accept) {
+    const { data, error } = await opsSb.rpc('respond_to_challenge',{p_challenge_id:id,p_accept:accept});
+    if (error) return toast('Challenge error',errText(error));
+    toast(accept?'Challenge accepted':'Challenge declined',accept?'The match has been created.':'No match was created.');
+    await loadGameState();
+    if (accept && data) go('league');
+  }
+
+  async function cancelChallenge(id) {
+    const { error } = await opsSb.rpc('cancel_challenge',{p_challenge_id:id});
+    if (error) return toast('Cancel failed',errText(error));
+    toast('Challenge cancelled','You can challenge another league.');
+    await loadGameState();
+  }
+
+  sendChallenge = async function() {
+    if(!currentUser) return authModal();
+    if(!currentLeague) return createLeagueModal();
+    if(!['owner','president'].includes(currentLeagueRole)) return toast('Admin only','Only the league owner/president can send challenges.');
+    await loadCompetition();
+    const { data: others, error } = await opsSb.from('leagues').select('id,name,city,region').neq('id',currentLeague.id).eq('status','active').limit(30);
+    if(error) return toast('Challenge error',errText(error));
+    if(!others?.length) return showModal(`<div class="sheetHead"><div><div class="eyebrow">Challenge mode</div><h3>No rivals yet</h3></div><button class="close" onclick="hideModal()">×</button></div><p class="help">Create a second real league/account to test the full flow.</p>`);
+    showModal(`<div class="sheetHead"><div><div class="eyebrow">Challenge mode</div><h3>Call them out</h3></div><button class="close" onclick="hideModal()">×</button></div><p class="help">Choose a real League of Leagues club.</p><div id="rivals">${others.map(x=>`<button class="secondary rivalBtn" data-id="${x.id}" style="text-align:left"><b>${esc(x.name)}</b><br><span style="color:#90a0b3;font-size:12px">${esc(x.city||'Italia')}${x.region?' · '+esc(x.region):''}</span></button>`).join('')}</div>`);
+    qa('.rivalBtn').forEach(btn=>btn.onclick=async()=>{
+      const { error }=await opsSb.from('challenge_requests').insert({challenger_league_id:currentLeague.id,challenged_league_id:btn.dataset.id,competition_id:activeCompetition,created_by:currentUser.id,status:'pending'});
+      if(error) return toast('Challenge failed',errText(error));
+      hideModal(); toast('Challenge sent','The rival president can now accept or decline it.'); await loadGameState();
+    });
+  };
+
+  buildLineup = async function() {
+    if(!currentUser) return authModal();
+    if(!currentLeague) return createLeagueModal();
+    if(!['owner','president'].includes(currentLeagueRole)) return toast('Admin only','Only the owner/president can lock the 5 vs 5 lineup.');
+    if(!currentMatch) return toast('No active match','First send or accept a challenge.');
+    if(currentMatch.status==='completed') return toast('Match completed','This lineup is already final.');
+    const mine=myMatchState();
+    if(mine?.callup_locked_at) return toast('Lineup locked','Your five managers are already locked for this match.');
+    if(currentMembers.length<5) return toast('Not enough managers',`You need at least 5 league members. You currently have ${currentMembers.length}.`);
+
+    const selected=[];
+    showModal(`<div class="sheetHead"><div><div class="eyebrow">5 vs 5 lineup</div><h3>Select your five</h3></div><bu
