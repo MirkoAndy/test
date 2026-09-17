@@ -1,0 +1,132 @@
+tton class="close" onclick="hideModal()">×</button></div><p class="help">Select exactly five managers. Confirming locks the lineup in the backend for this match.</p><div class="rosterSelect" id="opsRoster"></div><button class="cta" id="lockLineupBtn">Lock 5 managers</button>`);
+    const list=q('#opsRoster');
+    const render=()=>{
+      list.innerHTML=currentMembers.map(m=>{const chosen=selected.includes(m.id);return `<button class="memberCard ${chosen?'selected':''}" data-id="${m.id}"><div class="managerAvatar">${esc((m.display_name||'M').slice(0,2).toUpperCase())}</div><div class="memberInfo"><b>${esc(m.display_name||'Manager')}</b><small>${esc(m.team_name||m.role)}</small></div><div class="selector">${chosen?'✓':''}</div></button>`}).join('');
+      qa('#opsRoster .memberCard').forEach(btn=>btn.onclick=()=>{const id=btn.dataset.id,i=selected.indexOf(id);if(i>=0)selected.splice(i,1);else{if(selected.length>=5)return toast('Five selected','Remove one manager before selecting another.');selected.push(id)}render()});
+    };render();
+    q('#lockLineupBtn').onclick=async()=>{
+      if(selected.length!==5) return toast('Select five managers',`${selected.length}/5 selected.`);
+      q('#lockLineupBtn').disabled=true;
+      const { error }=await opsSb.rpc('set_match_callup',{p_match_id:currentMatch.id,p_member_ids:selected});
+      q('#lockLineupBtn').disabled=false;
+      if(error) return toast('Lineup failed',errText(error));
+      hideModal(); toast('Lineup locked','Your five managers are saved on the match.'); await loadGameState();
+    };
+  };
+
+  async function scoreModal() {
+    if(!currentUser || !currentLeague) return authModal();
+    if(!['owner','president'].includes(currentLeagueRole)) return toast('Admin only','Only the owner/president can submit scores.');
+    if(!currentMatch) return toast('No active match','There is no match to score.');
+    const mine=myMatchState();
+    if(!mine?.callup_locked_at) return toast('Lock lineup first','Select and lock your five managers.');
+    if(currentMatch.status!=='locked') return toast('Waiting for rival','Both leagues must lock their lineups before scores can be entered.');
+    if(mine?.scores_submitted_at) return toast('Scores submitted','Your scores are already locked.');
+    const { data: callups, error }=await opsSb.from('callups').select('*').eq('match_id',currentMatch.id).eq('league_id',currentLeague.id).order('slot');
+    if(error || callups?.length!==5) return toast('Scores unavailable','Could not load your five callups.');
+    const memberMap=Object.fromEntries(currentMembers.map(m=>[m.id,m]));
+    showModal(`<div class="sheetHead"><div><div class="eyebrow">Fantasy scores</div><h3>Enter the five scores</h3></div><button class="close" onclick="hideModal()">×</button></div><p class="help">MVP mode: enter the official fantasy score for each selected manager. Once submitted, the scores are locked.</p><form id="scoreForm">${callups.map(c=>`<div class="field"><label>Slot ${c.slot} · ${esc(memberMap[c.league_member_id]?.display_name||'Manager')} · ${esc(memberMap[c.league_member_id]?.team_name||'')}</label><input type="number" step="0.5" min="0" max="300" required data-member="${c.league_member_id}" placeholder="e.g. 72.5"></div>`).join('')}<button class="cta">Submit official scores</button></form>`);
+    q('#scoreForm').onsubmit=async e=>{
+      e.preventDefault();
+      const scores=qa('#scoreForm input[data-member]').map(inp=>({league_member_id:inp.dataset.member,score:Number(inp.value)}));
+      const { data, error }=await opsSb.rpc('submit_match_scores',{p_match_id:currentMatch.id,p_scores:scores});
+      if(error) return toast('Score submission failed',errText(error));
+      hideModal(); toast(data?.completed?'Match completed':'Scores locked',data?.completed?'Both sides scored. Result and standings updated.':'Waiting for the rival scores.'); await loadGameState();
+    };
+  }
+
+  async function renderLineupState() {
+    const card=q('#lineupStatus'); if(!card || !currentLeague) return;
+    if(!currentMatch){card.innerHTML='<h4>5 vs 5 lineup</h4><p>No active match. Send or accept a challenge first.</p>';return}
+    const mine=myMatchState();
+    const locked=!!mine?.callup_locked_at;
+    const scored=!!mine?.scores_submitted_at;
+    card.innerHTML=`<h4>5 vs 5 lineup</h4><p>${locked?'Your five managers are LOCKED.':'Your lineup is not locked yet.'}${currentMatch.status==='locked'?' Both teams are locked.':''}${scored?' Your fantasy scores are submitted.':''}</p>`;
+  }
+
+  async function renderRealRanking() {
+    if(!activeCompetition || !q('#rankingList')) return;
+    const { data: standings, error }=await opsSb.from('league_standings').select('*').eq('competition_id',activeCompetition).order('points',{ascending:false}).order('duel_wins',{ascending:false}).limit(50);
+    if(error || !standings?.length) return;
+    const names=await getLeagueNames(standings.map(s=>s.league_id));
+    q('#rankingList').innerHTML=standings.map((s,i)=>{
+      const l=names[s.league_id]||{name:'League',city:'Italia',region:''};
+      const mine=s.league_id===currentLeague?.id;
+      return `<div class="rankRow ${mine?'you':''}"><div class="rankNo">${i+1}</div><div class="crestSm ${i%2?'a':'h'}">${esc(l.name.split(/\s+/).map(x=>x[0]).join('').slice(0,3).toUpperCase())}</div><div class="rankTeamWrap"><b>${esc(l.name)}</b><small>${esc(l.city||'Italia')}${l.region?' · '+esc(l.region):''}${mine?' · You':''}</small></div><div class="eloNum">${s.points} pts</div><div class="trend">${s.duel_wins}-${s.duel_losses}</div></div>`;
+    }).join('');
+  }
+
+  async function renderMatchCenter() {
+    if(!currentMatch) return;
+    const names=await getLeagueNames([currentMatch.home_league_id,currentMatch.away_league_id]);
+    const screen=q('#match'); if(!screen) return;
+    const clubNames=screen.querySelectorAll('.teamCol .clubName');
+    if(clubNames[0]) clubNames[0].textContent=names[currentMatch.home_league_id]?.name || 'Home League';
+    if(clubNames[1]) clubNames[1].textContent=names[currentMatch.away_league_id]?.name || 'Away League';
+    const score=screen.querySelector('.miniScore');
+    if(score) score.textContent=currentMatch.status==='completed'?`${currentMatch.home_duel_wins}–${currentMatch.away_duel_wins}`:'–';
+    const victory=screen.querySelector('.victory');
+    if(victory){
+      if(currentMatch.status==='completed'){
+        const mineHome=currentMatch.home_league_id===currentLeague.id;
+        const a=mineHome?currentMatch.home_duel_wins:currentMatch.away_duel_wins;
+        const b=mineHome?currentMatch.away_duel_wins:currentMatch.home_duel_wins;
+        victory.textContent=a>b?'VICTORY':a<b?'DEFEAT':'DRAW';
+      } else victory.textContent=currentMatch.status==='locked'?'LINEUPS LOCKED':'MATCH OPEN';
+    }
+    if(!currentDuels.length) return;
+    const title=screen.querySelector('.duelTitle');
+    if(!title) return;
+    let n=title.nextElementSibling; while(n && n.classList.contains('duel')){const next=n.nextElementSibling;n.remove();n=next;}
+    const memberIds=currentDuels.flatMap(d=>[d.home_member_id,d.away_member_id]);
+    const {data:members}=await opsSb.from('league_members').select('id,user_id,team_name').in('id',memberIds);
+    const userIds=[...new Set((members||[]).map(m=>m.user_id))];
+    const {data:profiles}=userIds.length?await opsSb.from('profiles').select('id,display_name,username').in('id',userIds):{data:[]};
+    const pm=Object.fromEntries((profiles||[]).map(p=>[p.id,p]));
+    const mm=Object.fromEntries((members||[]).map(m=>[m.id,{...m,name:pm[m.user_id]?.display_name||pm[m.user_id]?.username||m.team_name||'Manager'}]));
+    [...currentDuels].reverse().forEach(d=>{
+      const el=document.createElement('div');el.className='duel';
+      el.innerHTML=`<div class="who">${esc(mm[d.home_member_id]?.name||'Home manager')}<small>${esc(mm[d.home_member_id]?.team_name||'')} · Slot ${d.slot}</small></div><div class="rating">${d.home_score??'—'}</div><div class="who">${esc(mm[d.away_member_id]?.name||'Away manager')}<small>${esc(mm[d.away_member_id]?.team_name||'')} · Slot ${d.slot}</small></div><div class="rating v">${d.away_score??'—'}</div>`;
+      title.insertAdjacentElement('afterend',el);
+    });
+  }
+
+  async function loadGameState() {
+    if(!currentUser || !currentLeague) return;
+    await Promise.all([loadCompetition(),loadChallenges(),loadCurrentMatch()]);
+    await Promise.all([renderChallengeState(),renderLineupState(),renderRealRanking(),renderMatchCenter()]);
+  }
+
+  const originalBoot = boot;
+  boot = async function() {
+    const { data:{session} }=await opsSb.auth.getSession();
+    currentUser=session?.user||null; currentLeague=null; currentMembers=[]; currentLeagueRole=null; currentProfile=null;
+    if(currentUser){
+      const {data:profile}=await opsSb.from('profiles').select('*').eq('id',currentUser.id).maybeSingle(); currentProfile=profile||null;
+      await loadMembershipLeague();
+      const name=currentProfile?.display_name||currentProfile?.username||currentUser.email?.split('@')[0]||'Manager';
+      q('#accountBtn').textContent=name.slice(0,2).toUpperCase();
+      q('#myManagerAvatar').textContent=name.slice(0,2).toUpperCase(); q('#myManagerName').textContent='You ('+name+')';
+      q('#accountHead').textContent=currentLeague?currentLeague.name:'Create your league';
+      q('#accountText').textContent=currentLeague?'Your club is live. Challenge a rival, lock five managers and submit the official scores.':'Create a league or join one through an invite link.';
+      q('#loginBtn').style.display='none'; q('#createLeagueBtn').style.display=currentLeague?'none':'block'; q('#logoutBtn').style.display='block';
+      if(currentLeague){q('#myLeagueRankName').textContent=currentLeague.name;q('#myLeagueRankMeta').textContent=(currentLeague.city||'Italia')+' · You';}
+      await loadLeagueMembers(); await loadGameState(); await joinFromUrl();
+    } else {
+      q('#accountBtn').textContent='MC';q('#loginBtn').style.display='block';q('#createLeagueBtn').style.display='none';q('#logoutBtn').style.display='none';q('#rosterPreview').textContent='Sign in to see your real managers.';
+      if(new URLSearchParams(location.search).get('join')) authModal();
+    }
+  };
+
+  q('#challengeBtn').onclick=()=>sendChallenge();
+  q('#lineupBtn').onclick=()=>buildLineup();
+  if(!q('#scoresBtn')){
+    const b=document.createElement('button');b.className='secondary';b.id='scoresBtn';b.textContent='Enter official fantasy scores';q('#lineupBtn').insertAdjacentElement('afterend',b);
+  }
+  q('#scoresBtn').onclick=scoreModal;
+  q('#refreshRoster').onclick=async()=>{await loadLeagueMembers();await loadGameState();};
+  q('#logoutBtn').onclick=async()=>{await opsSb.auth.signOut();toast('Logged out','See you next matchday.');await boot();};
+
+  opsSb.auth.onAuthStateChange(()=>setTimeout(()=>boot(),0));
+  setTimeout(()=>boot(),50);
+})();
