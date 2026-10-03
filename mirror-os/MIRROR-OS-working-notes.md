@@ -1,7 +1,7 @@
 # MIRROR OS — Working notes
 
 Pagina di lavoro che accompagna il deck "MIRROR OS · Concept v1.0" (41 slide: 35 principali + 6 di appendice).
-Tutto ciò che è segnato `[TO VALIDATE]` o `[__]` è un'ipotesi, non un dato.
+Tutto ciò che è segnato `[DA VALIDARE]` o `[__]` è un'ipotesi, non un dato.
 
 ---
 
@@ -14,7 +14,7 @@ Tutto ciò che è segnato `[TO VALIDATE]` o `[__]` è un'ipotesi, non un dato.
 5. **La mela è un segno, non una storia.** Compare solo su cover e closing, piccola, con foglia in metallo champagne. Nessun riferimento esplicito alla fiaba.
 6. **Etichetta di fase su ogni modulo** (MVP, V1, V2, V3, FUTURE · PHASE TBD). Chi guarda sa sempre cosa esiste come concept e cosa arriva dopo.
 7. **Mockup mobile-first con progressive disclosure.** Prima ciò che richiede attenzione, poi il dettaglio. Nessuna dashboard con grafici decorativi; l'unico grafico è una linea di trend e un istogramma di cassa.
-8. **Microcopy operativo in italiano** (WhatsApp, Google Sheet, email al commercialista), narrativa in inglese. Il deck regge un investitore internazionale e un titolare italiano.
+8. **Deck in italiano, nomi di prodotto in inglese.** Front Desk, Gap Filler, Night Shift, Skill Architect e i nomi delle Skill restano come marchi di prodotto; tutto il resto parla la lingua del titolare. La versione inglese resta in `mirror-os/deck-en/` per partner e investitori internazionali.
 9. **Zero numeri di traction, ROI o prezzi.** La scorecard (28) e il business model (32) usano solo placeholder; i numeri nei mockup sono dichiarati "simulated".
 10. **Il controllo umano è un sistema visivo ricorrente.** Escalation in rosso, approvazioni come pulsanti espliciti (Approve / Edit / Handle myself), matrice di autonomia (24) e matrice permessi (A2).
 
@@ -59,4 +59,4 @@ Tutto ciò che è segnato `[TO VALIDATE]` o `[__]` è un'ipotesi, non un dato.
 | 9 | Escalation umane | Numero e motivo; quota gestita entro un tempo target |
 | 10 | Tasso di errore AI | Azioni errate ÷ azioni totali, dopo revisione umana campionaria |
 
-Ogni KPI parte con `[BASELINE]` misurata prima dell'accensione, un `[TARGET]` concordato prima del lancio e un `[ACTUAL]` registrato durante il pilota.
+Ogni KPI parte con `[BASELINE]` misurata prima dell'accensione, un `[TARGET]` concordato prima del lancio e un `[REALE]` registrato durante il pilota.
