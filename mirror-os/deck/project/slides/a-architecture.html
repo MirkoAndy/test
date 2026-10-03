@@ -1,0 +1,36 @@
+<section id="a-architecture" data-transition="fade" style="background:#F4F0E8;color:#11100F;font-family:'Hanken Grotesk', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:32px">
+<p style="font-size:24px;font-weight:600;letter-spacing:4px;text-transform:uppercase;color:#541923">A3 — Architettura logica ed eventi</p>
+<h2 style="font-family:'Playfair Display', Georgia, serif;font-size:80px;font-weight:400;line-height:1.08;letter-spacing:-1px;color:#11100F">Entrano eventi, escono decisioni.</h2>
+<div style="display:flex;gap:64px">
+<div style="width:520px;display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;padding:14px 20px;background:#D8D0C6">1 · Connettori</p>
+<x-shape kind="arrow-down" style="width:24px;height:24px;background:#9B9A95;align-self:center"></x-shape>
+<p style="font-size:24px;padding:14px 20px;background:#FBF8F2;border:1px solid #D8D0C6">2 · Adattatori, uno per strumento</p>
+<x-shape kind="arrow-down" style="width:24px;height:24px;background:#9B9A95;align-self:center"></x-shape>
+<p style="font-size:24px;padding:14px 20px;background:#FBF8F2;border:1px solid #D8D0C6">3 · Livello dati unificato</p>
+<x-shape kind="arrow-down" style="width:24px;height:24px;background:#9B9A95;align-self:center"></x-shape>
+<p style="font-size:24px;padding:14px 20px;background:#FBF8F2;border:1px solid #D8D0C6">4 · Event engine</p>
+<x-shape kind="arrow-down" style="width:24px;height:24px;background:#9B9A95;align-self:center"></x-shape>
+<p style="font-size:24px;padding:14px 20px;background:#541923;color:#F4F0E8">5 · Agente + verifica regole</p>
+<x-shape kind="arrow-down" style="width:24px;height:24px;background:#9B9A95;align-self:center"></x-shape>
+<p style="font-size:24px;padding:14px 20px;background:#11100F;color:#F4F0E8">6 · Azione o escalation, registrata</p>
+</div>
+<div style="flex:1"><table style="font-size:24px;color:#11100F;line-height:1.3">
+<tr><th style="width:34%;text-align:left">Evento d'esempio</th><th style="width:28%;text-align:left">Fonte</th><th style="width:38%;text-align:left">Attiva</th></tr>
+<tr><td>appointment.created</td><td>Altegio</td><td>Front Desk pianifica la conferma</td></tr>
+<tr><td>appointment.cancelled</td><td>Altegio</td><td>Gap Filler apre lo slot</td></tr>
+<tr><td>message.received</td><td>WhatsApp</td><td>Analisi intento, agente giusto</td></tr>
+<tr><td>payment.recorded</td><td>Altegio, POS</td><td>Riconciliazione CFO</td></tr>
+<tr><td>review.posted</td><td>Business Profile</td><td>Retention; voto 3 o meno in escalation</td></tr>
+<tr><td>transaction.booked</td><td>Flusso bancario</td><td>Classificazione costi</td></tr>
+<tr><td>sheet.edited</td><td>Google Sheets</td><td>Ri-validazione, voce di audit</td></tr>
+<tr><td>nightly.run</td><td>Scheduler, 03:00</td><td>Night Shift</td></tr>
+</table></div>
+</div>
+<div style="position:absolute;left:128px;bottom:64px;width:1664px;display:flex;justify-content:space-between"><p style="font-size:24px;letter-spacing:3px;color:#6E665D">MIRROR OS · APPENDICE · NOMI EVENTI ILLUSTRATIVI · WEBHOOK [DA VALIDARE]</p><p style="font-size:24px;color:#6E665D">A3</p></div>
+<aside>L'architettura logica, in sei passaggi. I connettori parlano con gli strumenti esterni. Gli adattatori traducono i dati di ciascuno strumento in un modello comune. Il livello dati unificato tiene insieme clienti, appuntamenti, denaro e persone. L'event engine trasforma ogni cambiamento in un evento. L'agente competente riceve l'evento, ragiona, e prima di agire passa dal controllo delle policy. Il risultato è un'azione o un'escalation, sempre registrata nell'audit log. A destra alcuni esempi di eventi: un appuntamento creato in Altegio pianifica la conferma, una cancellazione apre lo slot al Gap Filler, una recensione con valutazione bassa viene portata a una persona, una modifica manuale al foglio viene rivalidata e tracciata. I nomi degli eventi sono illustrativi; la disponibilità di webhook o la necessità di polling va verificata con ogni fornitore, a partire da Altegio.
+
+IN SINTESI: Ogni cambiamento diventa un evento; ogni evento finisce in un'azione o escalation registrata.
+
+DIREZIONE VISIVA: pila verticale di sei blocchi con frecce sottili, ultimi due in burgundy e nero; tabella eventi a destra con nomi in stile tecnico.</aside>
+</section>
